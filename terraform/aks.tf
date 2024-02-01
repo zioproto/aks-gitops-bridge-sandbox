@@ -49,7 +49,7 @@ locals {
 }
 
 module "aks" {
-  source                            = "github.com/Azure/terraform-azurerm-aks.git?ref=be5ef5c3948b6305a0913d1f00b8eadcd01e7314"
+  source                            = "github.com/Azure/terraform-azurerm-aks.git?ref=632deec"
   resource_group_name               = azurerm_resource_group.this.name
   location                          = var.region
   kubernetes_version                = var.kubernetes_version
