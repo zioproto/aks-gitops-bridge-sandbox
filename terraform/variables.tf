@@ -79,5 +79,5 @@ variable "gitops_workload_basepath" {
 variable "gitops_workload_path" {
   description = "Git repository path for workload"
   type        = string
-  default     = "apps"
+  default     = "bootstrap/workloads"
 }
