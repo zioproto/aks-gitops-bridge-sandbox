@@ -1,5 +1,5 @@
 locals {
-  name        = "${local.environment}"
+  name        = local.environment
   environment = "control-plane"
   region      = var.region
 
@@ -30,12 +30,21 @@ locals {
   }
   addons = local.oss_addons
 
+  cluster_metadata = merge(local.addons_metadata, local.workloads_metadata)
+
   addons_metadata = {
-      addons_repo_url      = local.gitops_addons_url
-      addons_repo_basepath = local.gitops_addons_basepath
-      addons_repo_path     = local.gitops_addons_path
-      addons_repo_revision = local.gitops_addons_revision
-    }
+    addons_repo_url      = local.gitops_addons_url
+    addons_repo_basepath = local.gitops_addons_basepath
+    addons_repo_path     = local.gitops_addons_path
+    addons_repo_revision = local.gitops_addons_revision
+  }
+
+  workloads_metadata = {
+    workload_repo_url      = "${var.gitops_workload_org}/${var.gitops_workload_repo}"
+    workload_repo_basepath = var.gitops_workload_basepath
+    workload_repo_path     = var.gitops_workload_path
+    workload_repo_revision = var.gitops_workload_revision
+  }
 
   argocd_apps = {
     addons    = file("${path.module}/bootstrap/addons.yaml")
@@ -98,13 +107,13 @@ module "aks" {
 # GitOps Bridge: Bootstrap
 ################################################################################
 module "gitops_bridge_bootstrap" {
-  depends_on = [ module.aks ]
-  source = "gitops-bridge-dev/gitops-bridge/helm"
+  depends_on = [module.aks]
+  source     = "gitops-bridge-dev/gitops-bridge/helm"
 
   cluster = {
     cluster_name = module.aks.aks_name
     environment  = local.environment
-    metadata     = local.addons_metadata
+    metadata     = local.cluster_metadata
     addons       = local.addons
   }
   apps = local.argocd_apps

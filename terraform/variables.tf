@@ -54,3 +54,30 @@ variable "gitops_addons_path" {
   type        = string
   default     = "bootstrap/control-plane/addons"
 }
+
+# Workloads Git
+variable "gitops_workload_org" {
+  description = "Git repository org/user contains for workload"
+  type        = string
+  default     = "https://github.com/zioproto"
+}
+variable "gitops_workload_repo" {
+  description = "Git repository contains for workload"
+  type        = string
+  default     = "aks-gitops-bridge-sandbox"
+}
+variable "gitops_workload_revision" {
+  description = "Git repository revision/branch/ref for workload"
+  type        = string
+  default     = "main"
+}
+variable "gitops_workload_basepath" {
+  description = "Git repository base path for workload"
+  type        = string
+  default     = "gitops/"
+}
+variable "gitops_workload_path" {
+  description = "Git repository path for workload"
+  type        = string
+  default     = "apps"
+}
