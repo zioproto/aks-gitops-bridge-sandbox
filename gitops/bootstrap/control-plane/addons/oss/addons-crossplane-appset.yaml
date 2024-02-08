@@ -22,10 +22,13 @@ spec:
                   - key: akuity.io/argo-cd-cluster-name
                     operator: NotIn
                     values: [in-cluster]
+                  - key: enable_crossplane
+                    operator: In
+                    values: ['true']
           - clusters:
               selector:
                 matchLabels:
-                  environment: control-plane
+                  environment: staging
               values:
                 addonChartVersion: 1.14.5
           - clusters:
