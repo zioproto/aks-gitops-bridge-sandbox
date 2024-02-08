@@ -206,7 +206,7 @@ variable "net_profile_service_cidr" {
   type        = string
 }
 
-variable "crossplane_application_name" {
+variable "registered_application_name" {
   description = "Specifies the name of the Crossplane Microsoft Entra ID registered application."
   default     = "crossplane"
   type        = string
