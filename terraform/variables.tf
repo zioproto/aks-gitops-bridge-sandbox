@@ -26,8 +26,13 @@ variable "addons" {
   description = "Specifies the Kubernetes addons to install."
   type        = any
   default = {
-    enable_metrics_server               = false
-    enable_argocd = true
+    enable_argocd                            = true # installs argocd
+    enable_ingress_nginx                     = true # installs ingress-nginx
+    enable_crossplane_kubernetes_provider    = true # installs kubernetes provider
+    enable_crossplane_helm_provider          = true # installs helm provider
+    enable_crossplane                        = true # installs crossplane core
+    enable_azure_crossplane_provider         = true # installs azure contrib provider
+    enable_azure_crossplane_upbound_provider = true # installs azure upbound provider
   }
 }
 
@@ -102,7 +107,7 @@ variable "role_based_access_control_enabled" {
 variable "rbac_aad" {
   description = "Is Role Based Access Control based on Azure AD enabled?"
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "prefix" {
@@ -201,3 +206,8 @@ variable "net_profile_service_cidr" {
   type        = string
 }
 
+variable "crossplane_application_name" {
+  description = "Specifies the name of the Crossplane Microsoft Entra ID registered application."
+  default     = "crossplane"
+  type        = string
+}

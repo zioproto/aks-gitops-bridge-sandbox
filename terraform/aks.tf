@@ -12,21 +12,28 @@ locals {
 
   argocd_namespace = "argocd"
 
+  aws_addons = {
+    enable_azure_crossplane_provider         = try(var.addons.enable_azure_crossplane_provider, false)
+    enable_azure_crossplane_upbound_provider = try(var.addons.enable_azure_crossplane_upbound_provider, false)
+  }
   oss_addons = {
-    enable_argocd                          = try(var.addons.enable_argocd, false)
-    enable_argo_rollouts                   = try(var.addons.enable_argo_rollouts, false)
-    enable_argo_events                     = try(var.addons.enable_argo_events, false)
-    enable_argo_workflows                  = try(var.addons.enable_argo_workflows, false)
-    enable_cluster_proportional_autoscaler = try(var.addons.enable_cluster_proportional_autoscaler, false)
-    enable_gatekeeper                      = try(var.addons.enable_gatekeeper, false)
-    enable_gpu_operator                    = try(var.addons.enable_gpu_operator, false)
-    enable_ingress_nginx                   = try(var.addons.enable_ingress_nginx, false)
-    enable_kyverno                         = try(var.addons.enable_kyverno, false)
-    enable_kube_prometheus_stack           = try(var.addons.enable_kube_prometheus_stack, false)
-    enable_metrics_server                  = try(var.addons.enable_metrics_server, false)
-    enable_prometheus_adapter              = try(var.addons.enable_prometheus_adapter, false)
-    enable_secrets_store_csi_driver        = try(var.addons.enable_secrets_store_csi_driver, false)
-    enable_vpa                             = try(var.addons.enable_vpa, false)
+    enable_argocd                            = try(var.addons.enable_argocd, false)
+    enable_argo_rollouts                     = try(var.addons.enable_argo_rollouts, false)
+    enable_argo_events                       = try(var.addons.enable_argo_events, false)
+    enable_argo_workflows                    = try(var.addons.enable_argo_workflows, false)
+    enable_cluster_proportional_autoscaler   = try(var.addons.enable_cluster_proportional_autoscaler, false)
+    enable_gatekeeper                        = try(var.addons.enable_gatekeeper, false)
+    enable_gpu_operator                      = try(var.addons.enable_gpu_operator, false)
+    enable_ingress_nginx                     = try(var.addons.enable_ingress_nginx, false)
+    enable_kyverno                           = try(var.addons.enable_kyverno, false)
+    enable_kube_prometheus_stack             = try(var.addons.enable_kube_prometheus_stack, false)
+    enable_metrics_server                    = try(var.addons.enable_metrics_server, false)
+    enable_prometheus_adapter                = try(var.addons.enable_prometheus_adapter, false)
+    enable_secrets_store_csi_driver          = try(var.addons.enable_secrets_store_csi_driver, false)
+    enable_vpa                               = try(var.addons.enable_vpa, false)
+    enable_crossplane                        = try(var.addons.enable_crossplane, false)
+    enable_crossplane_kubernetes_provider    = try(var.addons.enable_crossplane_kubernetes_provider, false)
+    enable_crossplane_helm_provider          = try(var.addons.enable_crossplane_helm_provider, false)
   }
   addons = local.oss_addons
 
@@ -147,15 +154,50 @@ module "gitops_bridge_bootstrap" {
   cluster = {
     cluster_name = module.aks.aks_name
     environment  = local.environment
-    metadata     = local.cluster_metadata
+    metadata     = merge(local.cluster_metadata,
+      {
+        crossplane_service_principal_client_id = azuread_service_principal.crossplane_service_principal.client_id
+        crossplane_service_principal_password  = azuread_service_principal_password.crossplane_service_principal_password.value
+      }
+    )       
     addons       = local.addons
   }
   apps = local.argocd_apps
   argocd = {
-    namespace = "argocd"
+    namespace = local.argocd_namespace
   }
 }
 
 ################################################################################
 # Crossplane: Service Principal
 ################################################################################
+data "azuread_client_config" "current" {}
+data "azurerm_subscription" "current" {}
+
+resource "azuread_application" "crossplane_application" {
+  display_name = var.crossplane_application_name
+  owners       = [data.azuread_client_config.current.object_id]
+}
+
+resource "azuread_service_principal" "crossplane_service_principal" {
+  client_id                    = azuread_application.crossplane_application.client_id
+  app_role_assignment_required = true
+  owners                       = [data.azuread_client_config.current.object_id]
+}
+
+resource "time_rotating" "crossplane_credentials_time_rotating" {
+  rotation_years = 2
+}
+
+resource "azuread_service_principal_password" "crossplane_service_principal_password" {
+  service_principal_id = azuread_service_principal.crossplane_service_principal.object_id
+  rotate_when_changed = {
+    rotation = time_rotating.crossplane_credentials_time_rotating.id
+  }
+}
+resource "azurerm_role_assignment" "crossplane_subscription_owner_role_assignment" {
+  scope                            = data.azurerm_subscription.current.id
+  role_definition_name             = "Owner"
+  principal_id                     = azuread_service_principal.crossplane_service_principal.object_id
+  skip_service_principal_aad_check = true
+}
