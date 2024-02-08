@@ -1,7 +1,7 @@
 locals {
   name        = local.environment
   environment = "control-plane"
-  region      = var.region
+  location    = var.location
 
   #cluster_version = var.kubernetes_version
 
@@ -57,34 +57,68 @@ locals {
   }
 }
 
+################################################################################
+# Resource Group: Resource
+################################################################################
+resource "azurerm_resource_group" "this" {
+  name     = var.resource_group_name
+  location = var.location
+  tags     = var.tags
+}
+
+################################################################################
+# Virtual Network: Module
+################################################################################
+
+module "network" {
+  source              = "Azure/subnets/azurerm"
+  version             = "1.0.0"
+  resource_group_name = azurerm_resource_group.this.name
+  subnets = {
+    aks = {
+      address_prefixes  = ["10.52.0.0/16"]
+      service_endpoints = ["Microsoft.Storage"]
+    }
+  }
+  virtual_network_address_space = ["10.52.0.0/16"]
+  virtual_network_location      = azurerm_resource_group.this.location
+  virtual_network_name          = "vnet1"
+  virtual_network_tags          = var.tags
+}
+
+################################################################################
+# AKS: Module
+################################################################################
+
 module "aks" {
   source                            = "github.com/Azure/terraform-azurerm-aks.git?ref=632deec"
   resource_group_name               = azurerm_resource_group.this.name
-  location                          = var.region
+  location                          = var.location
   kubernetes_version                = var.kubernetes_version
   orchestrator_version              = var.kubernetes_version
-  role_based_access_control_enabled = true
-  rbac_aad                          = false
-  prefix                            = "gitops"
-  network_plugin                    = "azure"
+  role_based_access_control_enabled = var.role_based_access_control_enabled
+  rbac_aad                          = var.rbac_aad
+  prefix                            = var.prefix
+  network_plugin                    = var.network_plugin
   vnet_subnet_id                    = lookup(module.network.vnet_subnets_name_id, "aks")
-  os_disk_size_gb                   = 50
-  sku_tier                          = "Standard"
-  private_cluster_enabled           = false
-  enable_auto_scaling               = true
-  enable_host_encryption            = false
-  log_analytics_workspace_enabled   = true
-  agents_min_count                  = 1
-  agents_max_count                  = 5
+  os_disk_size_gb                   = var.os_disk_size_gb
+  sku_tier                          = var.sku_tier
+  private_cluster_enabled           = var.private_cluster_enabled
+  enable_auto_scaling               = var.enable_auto_scaling
+  enable_host_encryption            = var.enable_host_encryption
+  log_analytics_workspace_enabled   = var.log_analytics_workspace_enabled
+  agents_min_count                  = var.agents_min_count
+  agents_max_count                  = var.agents_max_count
   agents_count                      = null # Please set `agents_count` `null` while `enable_auto_scaling` is `true` to avoid possible `agents_count` changes.
-  agents_max_pods                   = 36
+  agents_max_pods                   = var.agents_max_pods
   agents_pool_name                  = "system"
   agents_availability_zones         = ["1", "2", "3"]
   agents_type                       = "VirtualMachineScaleSets"
   agents_size                       = var.agents_size
   monitor_metrics                   = {}
-  azure_policy_enabled              = true
-  microsoft_defender_enabled        = true
+  azure_policy_enabled              = var.azure_policy_enabled
+  microsoft_defender_enabled        = var.microsoft_defender_enabled
+  tags                              = var.tags
 
   agents_labels = {
     "nodepool" : "defaultnodepool"
@@ -94,9 +128,9 @@ module "aks" {
     "Agent" : "defaultnodepoolagent"
   }
 
-  network_policy             = "azure"
-  net_profile_dns_service_ip = "10.0.0.10"
-  net_profile_service_cidr   = "10.0.0.0/16"
+  network_policy             = var.network_policy
+  net_profile_dns_service_ip = var.net_profile_dns_service_ip
+  net_profile_service_cidr   = var.net_profile_service_cidr
 
   network_contributor_role_assigned_subnet_ids = { "aks" = lookup(module.network.vnet_subnets_name_id, "aks") }
 
@@ -122,22 +156,6 @@ module "gitops_bridge_bootstrap" {
   }
 }
 
-resource "azurerm_resource_group" "this" {
-  name     = "aks-gitops"
-  location = "eastus"
-}
-
-module "network" {
-  source              = "Azure/subnets/azurerm"
-  version             = "1.0.0"
-  resource_group_name = azurerm_resource_group.this.name
-  subnets = {
-    aks = {
-      address_prefixes  = ["10.52.0.0/16"]
-      service_endpoints = ["Microsoft.Storage"]
-    }
-  }
-  virtual_network_address_space = ["10.52.0.0/16"]
-  virtual_network_location      = azurerm_resource_group.this.location
-  virtual_network_name          = "vnet1"
-}
+################################################################################
+# Crossplane: Service Principal
+################################################################################
