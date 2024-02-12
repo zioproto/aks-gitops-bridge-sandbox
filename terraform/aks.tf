@@ -17,25 +17,23 @@ locals {
     enable_azure_crossplane_upbound_provider = try(var.addons.enable_azure_crossplane_upbound_provider, false)
   }
   oss_addons = {
-    enable_argocd                            = try(var.addons.enable_argocd, false)
-    enable_argo_rollouts                     = try(var.addons.enable_argo_rollouts, false)
-    enable_argo_events                       = try(var.addons.enable_argo_events, false)
-    enable_argo_workflows                    = try(var.addons.enable_argo_workflows, false)
-    enable_cluster_proportional_autoscaler   = try(var.addons.enable_cluster_proportional_autoscaler, false)
-    enable_gatekeeper                        = try(var.addons.enable_gatekeeper, false)
-    enable_gpu_operator                      = try(var.addons.enable_gpu_operator, false)
-    enable_ingress_nginx                     = try(var.addons.enable_ingress_nginx, false)
-    enable_kyverno                           = try(var.addons.enable_kyverno, false)
-    enable_kube_prometheus_stack             = try(var.addons.enable_kube_prometheus_stack, false)
-    enable_metrics_server                    = try(var.addons.enable_metrics_server, false)
-    enable_prometheus_adapter                = try(var.addons.enable_prometheus_adapter, false)
-    enable_secrets_store_csi_driver          = try(var.addons.enable_secrets_store_csi_driver, false)
-    enable_vpa                               = try(var.addons.enable_vpa, false)
-    enable_crossplane                        = try(var.addons.enable_crossplane, false)
-    enable_crossplane_kubernetes_provider    = try(var.addons.enable_crossplane_kubernetes_provider, false)
-    enable_crossplane_helm_provider          = try(var.addons.enable_crossplane_helm_provider, false)
+    enable_argocd                          = try(var.addons.enable_argocd, false)
+    enable_argo_rollouts                   = try(var.addons.enable_argo_rollouts, false)
+    enable_argo_events                     = try(var.addons.enable_argo_events, false)
+    enable_argo_workflows                  = try(var.addons.enable_argo_workflows, false)
+    enable_cluster_proportional_autoscaler = try(var.addons.enable_cluster_proportional_autoscaler, false)
+    enable_gatekeeper                      = try(var.addons.enable_gatekeeper, false)
+    enable_gpu_operator                    = try(var.addons.enable_gpu_operator, false)
+    enable_ingress_nginx                   = try(var.addons.enable_ingress_nginx, false)
+    enable_kyverno                         = try(var.addons.enable_kyverno, false)
+    enable_kube_prometheus_stack           = try(var.addons.enable_kube_prometheus_stack, false)
+    enable_metrics_server                  = try(var.addons.enable_metrics_server, false)
+    enable_prometheus_adapter              = try(var.addons.enable_prometheus_adapter, false)
+    enable_secrets_store_csi_driver        = try(var.addons.enable_secrets_store_csi_driver, false)
+    enable_vpa                             = try(var.addons.enable_vpa, false)
+    enable_crossplane                      = try(var.addons.enable_crossplane, false)
   }
-  addons = merge(azure_addons, local.oss_addons)
+  addons = merge(local.azure_addons, local.oss_addons)
 
   cluster_metadata = merge(local.addons_metadata, local.workloads_metadata)
 
@@ -143,29 +141,57 @@ module "aks" {
 
   depends_on = [module.network]
 }
+################################################################################
+# GitOps Bridge: Private ssh keys for git
+################################################################################
+resource "kubernetes_namespace" "argocd" {
+  metadata {
+    name = "argocd"
+  }
+  depends_on = [module.aks]
+}
+
+resource "kubernetes_secret" "git_secrets" {
+  for_each = {
+    git-addons = {
+      type          = "git"
+      url           = var.gitops_addons_org
+      sshPrivateKey = file(pathexpand(var.git_private_ssh_key))
+    }
+    git-workloads = {
+      type          = "git"
+      url           = var.gitops_workload_org
+      sshPrivateKey = file(pathexpand(var.git_private_ssh_key))
+    }
+  }
+  metadata {
+    name      = each.key
+    namespace = kubernetes_namespace.argocd.metadata[0].name
+    labels = {
+      "argocd.argoproj.io/secret-type" = "repo-creds"
+    }
+  }
+  data = each.value
+  depends_on = [kubernetes_namespace.argocd]
+}
 
 ################################################################################
 # GitOps Bridge: Bootstrap
 ################################################################################
 module "gitops_bridge_bootstrap" {
-  depends_on = [module.aks]
   source     = "gitops-bridge-dev/gitops-bridge/helm"
 
   cluster = {
     cluster_name = module.aks.aks_name
     environment  = local.environment
-    metadata     = merge(local.cluster_metadata,
-      {
-        service_principal_client_id = azuread_service_principal.service_principal.client_id
-        service_principal_password  = azuread_service_principal_password.service_principal_password.value
-      }
-    )       
-    addons       = local.addons
+    metadata = local.cluster_metadata
+    addons = local.addons
   }
   apps = local.argocd_apps
   argocd = {
     namespace = local.argocd_namespace
   }
+  depends_on = [module.aks]
 }
 
 ################################################################################
@@ -201,3 +227,57 @@ resource "azurerm_role_assignment" "service_principal_subscription_owner_role_as
   principal_id                     = azuread_service_principal.service_principal.object_id
   skip_service_principal_aad_check = true
 }
+
+################################################################################
+# Crossplane: Secret
+################################################################################
+resource "kubernetes_namespace" "crossplane" {
+  metadata {
+    name = "crossplane-system"
+  }
+  depends_on = [module.aks]
+}
+
+resource "kubernetes_secret" "crossplane_secret" {
+  type = "Opaque"
+
+  metadata {
+    name      = "azure-secret"
+    namespace = kubernetes_namespace.crossplane.metadata[0].name
+  }
+
+  data = {
+    creds = base64encode(jsonencode({
+    "clientId"                       = "${azuread_service_principal.service_principal.client_id}"
+    "clientSecret"                   = "${azuread_service_principal_password.service_principal_password.value}"
+    "subscriptionId"                 = "${data.azurerm_subscription.current.subscription_id}"
+    "tenantId"                       = "${data.azurerm_subscription.current.tenant_id}"
+    "activeDirectoryEndpointUrl"     = "https://login.microsoftonline.com"
+    "resourceManagerEndpointUrl"     = "https://management.azure.com/"
+    "activeDirectoryGraphResourceId" = "https://graph.windows.net/"
+    "sqlManagementEndpointUrl"       = "https://management.core.windows.net:8443/"
+    "galleryEndpointUrl"             = "https://gallery.azure.com/"
+    "managementEndpointUrl"          = "https://management.core.windows.net/"
+    }))
+  }
+  depends_on = [kubernetes_namespace.crossplane]
+}
+
+#resource "kubectl_manifest" "crossplane_provider_config" {
+#  yaml_body = <<-EOF
+#    apiVersion: azure.upbound.io/v1beta1
+#    metadata:
+#      name: default
+#    kind: ProviderConfig
+#    spec:
+#      credentials:
+#        source: Secret
+#        secretRef:
+#          namespace: crossplane-system
+#          name: azure-secret
+#          key: creds
+#    EOF
+#
+#  depends_on = [kubernetes_secret.crossplane_secret]
+#}
+
