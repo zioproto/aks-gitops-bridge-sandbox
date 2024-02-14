@@ -40,7 +40,7 @@ variable "addons" {
 variable "gitops_addons_org" {
   description = "Specifies the Git repository org/user contains for addons."
   type        = string
-  default     = "https://github.com/zioproto"
+  default     = "https://github.com/paolosalvatori"
 }
 variable "gitops_addons_repo" {
   description = "Specifies the Git repository contains for addons."
@@ -67,7 +67,7 @@ variable "gitops_addons_path" {
 variable "gitops_workload_org" {
   description = "Git repository org/user contains for workload."
   type        = string
-  default     = "https://github.com/zioproto"
+  default     = "https://github.com/paolosalvatori"
 }
 variable "gitops_workload_repo" {
   description = "Specifies the Git repository contains for workload."
