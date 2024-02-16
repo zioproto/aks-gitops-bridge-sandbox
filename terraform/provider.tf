@@ -12,9 +12,17 @@ terraform {
       source  = "hashicorp/random"
       version = "~> 3.1"
     }
+    kubernetes = {
+      source  = "hashicorp/kubernetes"
+      version = ">=2.16.0"
+    }
     helm = {
       source  = "hashicorp/helm"
-      version = ">= 2.10.1"
+      version = ">=2.7.1"
+    }
+    kubectl = {
+      source  = "gavinbunney/kubectl"
+      version = ">= 1.7.0"
     }
   }
   required_version = ">= 1.1.0"
@@ -50,4 +58,9 @@ provider "helm" {
   }
 
 }
+
+provider "kubectl" {
+  config_path = local_file.kubeconfig.filename
+}
+
 provider "random" {}

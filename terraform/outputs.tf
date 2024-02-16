@@ -8,13 +8,13 @@ output "tenant" {
   value       = data.azurerm_client_config.current.tenant_id 
 }
 
-output "crossplane_service_principal_client_id" {
+output "service_principal_client_id" {
   description = "Specifies the client id of the service principal."
-  value = azuread_service_principal.crossplane_service_principal.client_id
+  value = var.use_service_principal ? azuread_service_principal.service_principal[0].client_id : null
 }
 
-output "crossplane_service_principal_password" {
+output "service_principal_password" {
   description = "Specifies the password for the service principal."
-  value = azuread_service_principal_password.crossplane_service_principal_password.value
+  value = var.use_service_principal ? azuread_service_principal_password.service_principal_password[0].value : null
   sensitive = true
 }
